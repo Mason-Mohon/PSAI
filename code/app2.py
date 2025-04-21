@@ -107,6 +107,7 @@ def generate_gemini_response(query, context_chunks, temperature=0.7):
             "Answer the question strictly based on the above context. "
             "When referencing any chunk, indicate its reference ID inline (e.g., [REF_1], [REF_2]) and include numbered endnotes at the end of your response. "
             "Each endnote should follow this format: [n] Title of piece, publication (e.g., Phyllis Schlafly Report or book title), date, author. "
+            "If the information is not visible in the chunk itself, use the information within the metadata to generate the citation."
             "Do not include source filenames. If the author is Phyllis Schlafly, treat it as your own words and omit the author from the endnote."
         )
 
