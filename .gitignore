@@ -11925,3 +11925,4 @@ code/data/tmp/2002/01/extract.log
 .gitignore
 code/__pycache__/comm_chunker.cpython-312.pyc
 code/__pycache__/page_text_extractor.cpython-312.pyc
+code/data/raw/comm/2002/02.txt

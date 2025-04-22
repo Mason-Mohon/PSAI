@@ -1,20 +1,3 @@
-"""page_text_extractor.py
-==================================================
-Extract raw OCR text **page‑by‑page** from a single PDF and save
-each page’s text to an individual `.txt` file.
-
-This utility is intentionally simple so you can confirm the OCR
-output before moving on to more complex post‑processing.
-
-Public API
-----------
->>> from page_text_extractor import ExtractConfig, extract_pages
->>> cfg = ExtractConfig(pdf_path="/path/to/01.pdf", out_dir="/tmp/out")
->>> extract_pages(cfg)
-
-It also doubles as a CLI tool:
->>> python -m page_text_extractor --pdf /path/to/01.pdf --out_dir /tmp/out
-"""
 from __future__ import annotations
 
 import argparse
@@ -22,130 +5,138 @@ import logging
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from typing import Optional
 
+import fitz  # PyMuPDF
 import pytesseract
 from PIL import Image
 
-# --- Optional / Lazy imports -------------------------------------------------
+# tqdm is optional; we import lazily to avoid hard dep
 try:
-    import fitz  # PyMuPDF
-except ImportError as exc:  # pragma: no cover
-    raise ImportError(
-        "PyMuPDF is not installed. Run: pip install PyMuPDF"
-    ) from exc
-
-# tqdm is optional; fall back to plain range if unavailable
-try:
-    from tqdm import tqdm  # type: ignore
+    from tqdm import tqdm
 except ImportError:  # pragma: no cover
     tqdm = None  # type: ignore
 
-__all__ = ["ExtractConfig", "extract_pages"]
-
-# ---------------------------------------------------------------------------
-# Dataclass holding configuration -------------------------------------------
-# ---------------------------------------------------------------------------
 
 @dataclass
 class ExtractConfig:
-    """Runtime parameters for page‑by‑page OCR extraction."""
-
-    pdf_path: Path | str
-    out_dir: Path | str
+    pdf_path: Path
+    out_path: Optional[Path] = None  # default: same stem + .txt in pdf dir
     dpi: int = 300
     lang: str = "eng"
     overwrite: bool = False
     show_progress: bool = True
 
-    def __post_init__(self) -> None:  # normalise to Path objects
-        self.pdf_path = Path(self.pdf_path).expanduser().resolve()
-        self.out_dir = Path(self.out_dir).expanduser().resolve()
-        if not self.pdf_path.exists():
-            raise FileNotFoundError(f"PDF not found: {self.pdf_path}")
-        self.out_dir.mkdir(parents=True, exist_ok=True)
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+def _render_page(page, dpi: int) -> Image.Image:
+    """Render a PyMuPDF page to a PIL Image."""
+    zoom = dpi / 72  # PyMuPDF pages are 72 dpi default
+    mat = fitz.Matrix(zoom, zoom)
+    pix = page.get_pixmap(matrix=mat, alpha=False)
+    mode = "RGB" if pix.n < 4 else "RGBA"
+    return Image.frombytes(mode, [pix.width, pix.height], pix.samples)
+
+
+def _ocr_image(img: Image.Image, lang: str) -> str:
+    """Run Tesseract OCR on the PIL image and return raw text."""
+    return pytesseract.image_to_string(img, lang=lang)
 
 
 # ---------------------------------------------------------------------------
-# Core function --------------------------------------------------------------
+# Public runner
 # ---------------------------------------------------------------------------
 
-def extract_pages(cfg: ExtractConfig) -> List[Path]:
-    """OCR every page of *cfg.pdf_path* and save as text files in *cfg.out_dir*.
+def extract_pdf_to_txt(cfg: ExtractConfig) -> Path:
+    """OCR the entire PDF and save one TXT file with blank lines between pages.
 
-    Returns a list of `Path`s to the text files that were written (or
-    overwritten) during this run.
+    Parameters
+    ----------
+    cfg : ExtractConfig
+        Configuration dataclass.
+
+    Returns
+    -------
+    Path
+        Path to the written TXT file.
     """
+    pdf_path = cfg.pdf_path.expanduser().resolve()
+    if not pdf_path.exists():
+        raise FileNotFoundError(pdf_path)
+
+    out_path = (
+        cfg.out_path.expanduser().resolve()
+        if cfg.out_path
+        else pdf_path.with_suffix(".txt")
+    )
+
+    if out_path.exists() and not cfg.overwrite:
+        logging.info("%s already exists; skipping (use overwrite=True)", out_path)
+        return out_path
 
     logging.basicConfig(
         level=logging.INFO,
-        format="[%(levelname)s] %(message)s",
-        handlers=[logging.StreamHandler(sys.stdout)],
-        force=True,
+        format="%(levelname)s | %(message)s",
+        stream=sys.stdout,
     )
-    log = logging.getLogger("extract_pages")
 
-    log.info("Opening %s", cfg.pdf_path)
-    doc = fitz.open(cfg.pdf_path)
+    logging.info("Opening %s", pdf_path)
+    doc = fitz.open(pdf_path)
+    total_pages = doc.page_count
 
-    dpi_scale = cfg.dpi / 72  # PyMuPDF renders at 72 dpi by default
-    matrix = fitz.Matrix(dpi_scale, dpi_scale)
-
-    iterator = range(doc.page_count)
+    iterator = range(total_pages)
     if cfg.show_progress and tqdm is not None:
-        iterator = tqdm(iterator, desc="OCR pages", unit="page")  # type: ignore
+        iterator = tqdm(iterator, desc="OCR pages", unit="page")
 
-    written: List[Path] = []
+    page_texts: list[str] = []
+    for i in iterator:
+        page = doc.load_page(i)
+        img = _render_page(page, cfg.dpi)
+        text = _ocr_image(img, cfg.lang).strip()
+        page_texts.append(text)
 
-    for page_index in iterator:  # type: ignore
-        page = doc.load_page(page_index)
-        pix = page.get_pixmap(matrix=matrix)
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+    joined = "\n\n".join(page_texts) + "\n"  # final newline
 
-        text = pytesseract.image_to_string(img, lang=cfg.lang)
+    out_path.write_text(joined, encoding="utf-8")
+    logging.info("Wrote %d pages → %s (%.1f KB)", total_pages, out_path, out_path.stat().st_size / 1024)
+    return out_path
 
-        txt_name = f"page_{page_index + 1:03}.txt"
-        txt_path = cfg.out_dir / txt_name
+# Alias for backward compatibility
+extract_pages_to_txt = extract_pdf_to_txt
 
-        if txt_path.exists() and not cfg.overwrite:
-            log.debug("Skipping existing %s", txt_path.name)
-            continue
-
-        txt_path.write_text(text, encoding="utf-8", errors="replace")
-        written.append(txt_path)
-
-    log.info("Wrote %s text files to %s", len(written), cfg.out_dir)
-    return written
+__all__ = ["ExtractConfig", "extract_pdf_to_txt", "extract_pages_to_txt"]
 
 
 # ---------------------------------------------------------------------------
-# CLI entry‑point ------------------------------------------------------------
+# CLI
 # ---------------------------------------------------------------------------
 
-def _parse_args(argv: list[str] | None = None) -> ExtractConfig:
-    p = argparse.ArgumentParser(description="OCR every page of a PDF to .txt files")
-    p.add_argument("--pdf", required=True, help="Path to the input PDF")
-    p.add_argument("--out_dir", required=True, help="Directory to store output .txt files")
-    p.add_argument("--dpi", type=int, default=300, help="Rendering DPI for OCR (default: 300)")
-    p.add_argument("--lang", default="eng", help="Tesseract language code (default: eng)")
-    p.add_argument("--overwrite", action="store_true", help="Overwrite existing .txt files")
-    p.add_argument("--no_progress", action="store_true", help="Disable tqdm progress bar")
+def _build_cli() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(description="OCR a PDF to a single TXT file.")
+    p.add_argument("--pdf", required=True, type=Path, help="Path to input PDF")
+    p.add_argument("--out", type=Path, help="Path to output TXT (optional)")
+    p.add_argument("--dpi", type=int, default=300, help="Render DPI (default 300)")
+    p.add_argument("--lang", default="eng", help="Tesseract language (default 'eng')")
+    p.add_argument("--overwrite", action="store_true", help="Overwrite existing output file")
+    p.add_argument("--no-progress", dest="show_progress", action="store_false", help="Disable tqdm progress bar")
+    return p
 
-    ns = p.parse_args(argv)
-    return ExtractConfig(
-        pdf_path=ns.pdf,
-        out_dir=ns.out_dir,
-        dpi=ns.dpi,
-        lang=ns.lang,
-        overwrite=ns.overwrite,
-        show_progress=not ns.no_progress,
+
+def _main_from_cli(argv: list[str] | None = None):  # pragma: no cover
+    args = _build_cli().parse_args(argv)
+    cfg = ExtractConfig(
+        pdf_path=args.pdf,
+        out_path=args.out,
+        dpi=args.dpi,
+        lang=args.lang,
+        overwrite=args.overwrite,
+        show_progress=args.show_progress,
     )
-
-
-def main(argv: list[str] | None = None) -> None:  # pragma: no cover
-    cfg = _parse_args(argv)
-    extract_pages(cfg)
+    extract_pdf_to_txt(cfg)
 
 
 if __name__ == "__main__":  # pragma: no cover
-    main()
+    _main_from_cli()
