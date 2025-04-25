@@ -150,3 +150,85 @@ The pipeline is fully extensible:
 ✅ You can search each collection independently or create an aggregated interface for unified search.
 
 🛠 The RAG system can use these vectorized embeddings directly via semantic search + retrieval.
+
+## 📅 April 25 Update
+
+### ✅ Batch 2: Chunk Uploads to Qdrant Cloud
+
+A major update was completed to expand the PSAI knowledge base by uploading additional content into the Qdrant vector database. This included new and reorganized collections covering commentaries, interviews, columns, and more books. All chunks were embedded using **MiniLM** (`all-MiniLM-L6-v2`) and uploaded client-side in batches via the Qdrant Cloud API.
+
+---
+
+### 🆕 New Collections Created
+
+| Collection Name   | Description |
+|-------------------|-------------|
+| `commentaries`    | Phyllis Schlafly's audio commentary transcripts (2002–2024) and NET-TV commentaries |
+| `columns_chunks`  | Human Events columns and other standalone political commentary pieces |
+| `interviews`      | Transcribed interviews of Phyllis Schlafly conducted by Mark DePue |
+| `book_chunks`     | Three more books were added to the existing `book_chunks` collection |
+
+---
+
+### 📄 Files Processed and Uploaded
+
+#### 🔹 Commentaries
+- All JSON files from `2002.json` to `2024.json` in:
+  ```
+  /Users/mason/Desktop/Technical_Projects/PYTHON_Projects/PSAI/chunks/batch2/commentaries/
+  ```
+- Plus NET-TV commentaries:
+  ```
+  /Users/mason/Desktop/Technical_Projects/PYTHON_Projects/PSAI/chunks/batch2/NET-TV.json
+  ```
+
+#### 🔹 Columns
+- Human Events and similar essays in:
+  ```
+  /Users/mason/Desktop/Technical_Projects/PYTHON_Projects/PSAI/chunks/batch2/othercolumns.json
+  ```
+
+#### 🔹 Interviews
+- Single file containing all interview transcript chunks:
+  ```
+  /Users/mason/Desktop/Technical_Projects/PYTHON_Projects/PSAI/chunks/batch2/interview.json
+  ```
+
+#### 🔹 Books (added to existing `book_chunks` collection)
+- `allegiance.json`  
+- `choice_not_echo_2014.json`  
+- `how_mass_immigration.json`  
+Located in:
+  ```
+  /Users/mason/Desktop/Technical_Projects/PYTHON_Projects/PSAI/chunks/batch2/
+  ```
+
+---
+
+### 🧠 Embedding and Upload Pipeline
+- All chunks were embedded locally using `all-MiniLM-L6-v2`
+- Metadata was preserved and enriched per chunk (e.g., title, author, interview date)
+- Batched upload was handled with `embed_and_upload()` for memory safety
+- Collections were created or reused via `ensure_collection()`
+
+---
+
+### 🌐 App Integration
+
+The web app’s backend (`app.py`) uses dynamic collection loading with:
+```python
+def get_available_collections():
+    collections = [c.name for c in qdrant_client.get_collections().collections]
+    return collections
+```
+This means **no manual update** is needed when new collections are added to Qdrant.
+
+The Jinja2 `{% for collection in collections %}` loop ensures the sidebar reflects the current available collections automatically.
+
+---
+
+✅ **Next Steps**
+- Evaluate newly uploaded content for accuracy in chunking and metadata alignment
+- Add biographical sources and the remaining books to further expand `book_chunks` and `interviews`
+- Begin integrating LangChain-based collection selection logic (e.g., political vs biographical)
+- Consider fallback integration of Google Search as requested
