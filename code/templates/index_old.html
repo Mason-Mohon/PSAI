@@ -62,22 +62,6 @@
         #gemini-response ol, #gemini-response ul {
             padding-left: 20px;
         }
-        .tips-button {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 1000;
-        }
-        .modal-body ul {
-            padding-left: 20px;
-        }
-        .tip-section {
-            margin-bottom: 15px;
-        }
-        .tip-title {
-            font-weight: bold;
-            color: #0d6efd;
-        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
@@ -175,102 +159,6 @@
                         <h5>Reference Chunks:</h5>
                         <div id="chunks-container"></div>
                     </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Helpful Tips Button -->
-    <button class="btn btn-info btn-lg rounded-circle tips-button" data-bs-toggle="modal" data-bs-target="#tipsModal">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-question-lg" viewBox="0 0 16 16">
-            <path fill-rule="evenodd" d="M4.475 5.458c-.284 0-.514-.237-.47-.517C4.28 3.24 5.576 2 7.825 2c2.25 0 3.767 1.36 3.767 3.215 0 1.344-.665 2.288-1.79 2.973-1.1.659-1.414 1.118-1.414 2.01v.03a.5.5 0 0 1-.5.5h-.77a.5.5 0 0 1-.5-.495l-.003-.2c-.043-1.221.477-2.001 1.645-2.712 1.03-.632 1.397-1.135 1.397-2.028 0-.979-.758-1.698-1.926-1.698-1.009 0-1.71.529-1.938 1.402-.066.254-.278.461-.54.461h-.777ZM7.496 14c.622 0 1.095-.474 1.095-1.09 0-.618-.473-1.092-1.095-1.092-.606 0-1.087.474-1.087 1.091S6.89 14 7.496 14"/>
-        </svg>
-    </button>
-    
-    <!-- Helpful Tips Modal -->
-    <div class="modal fade" id="tipsModal" tabindex="-1" aria-labelledby="tipsModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="tipsModalLabel">Helpful Tips for Using Phyllis AI</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="tip-section">
-                        <p class="tip-title">Getting Started</p>
-                        <p>The Phyllis AI prototype is designed to answer questions based on the content in its collections. It will respond in the voice of Phyllis Schlafly based on her writings and other conservative sources.</p>
-                    </div>
-                    
-                    <div class="tip-section">
-                        <p class="tip-title">Collections</p>
-                        <ul>
-                            <li><strong>Select All:</strong> For best results, we recommend checking all collections to search across all available content.</li>
-                            <li>When specific topics are involved, you can narrow down to relevant collections.</li>
-                        </ul>
-                    </div>
-                    
-                    <div class="tip-section">
-                        <p class="tip-title">Number of Chunks</p>
-                        <ul>
-                            <li>This determines how many text segments from the collections will be used to generate the response.</li>
-                            <li><strong>More chunks (higher value):</strong> Provides more context but may include less relevant information.</li>
-                            <li><strong>Fewer chunks (lower value):</strong> More focused but might miss relevant information.</li>
-                            <li>The default of 5 chunks works well for most queries.</li>
-                        </ul>
-                    </div>
-                    
-                    <div class="tip-section">
-                        <p class="tip-title">Temperature</p>
-                        <ul>
-                            <li>Controls the creativity/randomness of the AI response.</li>
-                            <li><strong>Higher temperature (closer to 1.0):</strong> More creative, varied responses.</li>
-                            <li><strong>Lower temperature (closer to 0.0):</strong> More focused, deterministic responses.</li>
-                            <li>The default value of 0.7 provides a good balance.</li>
-                        </ul>
-                    </div>
-                    
-                    <div class="tip-section">
-                        <p class="tip-title">Similarity Threshold</p>
-                        <ul>
-                            <li>Determines how closely related text chunks must be to your query to be included.</li>
-                            <li><strong>Higher threshold:</strong> Only very relevant chunks will be included.</li>
-                            <li><strong>Zero threshold (0.0):</strong> Includes chunks regardless of relevance.</li>
-                            <li>Increase this value if you're getting irrelevant information in responses.</li>
-                        </ul>
-                    </div>
-                    
-                    <div class="tip-section">
-                        <p class="tip-title">Asking Effective Questions</p>
-                        <ul>
-                            <li><strong>Be specific:</strong> "What did Phyllis Schlafly say about the Equal Rights Amendment?" works better than "Tell me about equality."</li>
-                            <li><strong>Stay on topic:</strong> The AI can only answer questions related to content in its collections.</li>
-                            <li><strong>One question at a time:</strong> Ask single, focused questions rather than multiple questions in one query.</li>
-                            <li><strong>No chat history:</strong> Each query is independent - the AI doesn't remember previous questions or answers.</li>
-                            <li>If you want to follow up on a previous answer, include relevant information from that answer in your new question.</li>
-                        </ul>
-                    </div>
-                    
-                    <div class="tip-section">
-                        <p class="tip-title">Understanding Results</p>
-                        <ul>
-                            <li><strong>Reference Chunks:</strong> These show you the exact sources used for the response.</li>
-                            <li><strong>Citations:</strong> The response includes citations (like [REF_1]) to show which source material was used.</li>
-                            <li><strong>Token Information:</strong> Shows how much computational resources were used to generate the response.</li>
-                        </ul>
-                    </div>
-                    
-                    <div class="tip-section">
-                        <p class="tip-title">Limitations</p>
-                        <ul>
-                            <li>The AI can only answer based on the content in its collections.</li>
-                            <li>It cannot answer questions about topics not covered in the source materials.</li>
-                            <li>The AI is not a general chatbot - it's specifically focused on representing Phyllis Schlafly's views.</li>
-                            <li>Each query stands alone - there is no conversation history.</li>
-                        </ul>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>
         </div>
@@ -425,3 +313,4 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
+  
