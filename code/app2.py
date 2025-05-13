@@ -29,6 +29,39 @@ model = SentenceTransformer("all-MiniLM-L6-v2")
 
 genai_client = genai.Client(api_key=GOOGLE_API_KEY)
 
+# New function to refine the query
+def refine_query_for_semantic_search(query_text: str, client: genai.Client, model_name: str) -> str:
+    prompt = f"""Rewrite the following user query to be optimized for semantic search against a knowledge base primarily focused on Phyllis Schlafly's life, work, and conservative viewpoints.
+Extract the key entities, topics, and the core intent. Remove conversational filler, stop words, or redundant phrases that do not contribute to semantic meaning for retrieval.
+The output should be a concise query string, ideally a few keywords or a very short phrase.
+
+User Query: "{query_text}"
+Optimized Search Query:"""
+    try:
+        response = client.models.generate_content(
+            model=model_name,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.1,  # Low temperature for more deterministic and focused output
+                max_output_tokens=60, # Refined query should be concise
+                stop_sequences=["\n"] # Stop if it starts generating new lines
+            )
+        )
+        refined_query = response.text.strip()
+        # Clean up potential prefixes if the model includes them despite the prompt
+        if refined_query.startswith("Optimized Search Query:"):
+            refined_query = refined_query.replace("Optimized Search Query:", "").strip()
+        refined_query = refined_query.strip('"') # Remove potential surrounding quotes
+        
+        print(f"Original query for refinement: '{query_text}'")
+        print(f"Refined query: '{refined_query}'")
+        
+        # Fallback to original query if refinement results in an empty string
+        return refined_query if refined_query else query_text
+    except Exception as e:
+        print(f"Error refining query: {e}")
+        return query_text # Fallback to original query on error
+
 # Get available collections
 def get_available_collections():
     collections = [c.name for c in qdrant_client.get_collections().collections]
@@ -152,29 +185,35 @@ def index():
 @app.route('/api/query', methods=['POST'])
 def query():
     data = request.json
-    query_text = data.get('query', '')
+    original_query_text = data.get('query', '')
     selected_collections = data.get('collections', [])
     chunk_limit = int(data.get('chunk_limit', 5))
     temperature = float(data.get('temperature', 0.7))
     similarity_threshold = float(data.get('similarity_threshold', 0.0))
 
-    if not query_text:
+    if not original_query_text:
         return jsonify({"error": "Query is required"}), 400
 
     if not selected_collections:
         return jsonify({"error": "At least one collection must be selected"}), 400
 
+    # Refine the query before semantic search
+    refined_query_text = refine_query_for_semantic_search(original_query_text, genai_client, GEMINI_MODEL)
+
     search_results = semantic_search(
-        query_text,
+        refined_query_text,  # Use the refined query for searching
         selected_collections,
         limit=chunk_limit,
         similarity_threshold=similarity_threshold
     )
 
-    gemini_response = generate_gemini_response(query_text, search_results, temperature)
+    # Use the original query text for generating the final response, as that's what the user asked
+    gemini_response = generate_gemini_response(original_query_text, search_results, temperature)
 
     return jsonify({
-        "query": query_text,
+        "original_query": original_query_text,
+        "refined_query_for_search": refined_query_text,
+        "query_used_for_search": refined_query_text, # Explicitly state what was used
         "chunks": search_results,
         "response": gemini_response.get("text", "Error generating response"),
         "token_info": gemini_response.get("token_info", {})
