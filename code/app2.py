@@ -191,9 +191,10 @@ def generate_gemini_response_internal(query, context_chunks, temperature=0.7):
         return {"text": f"Error generating response: {str(e)}", "token_info": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}, "formatted_context_for_generation": ""}
 
 # --- LangGraph Nodes ---
-def initialize_state_node(state: GraphState, invocation_input: Dict[str, Any]) -> Dict[str, Any]:
+def initialize_state_node(state: GraphState) -> Dict[str, Any]:
     print("--- Running: Initialize State Node ---")
-    initial_query = invocation_input.get('query', '')
+    # Extract values directly from the state (which contains the initial input)
+    initial_query = state.get('original_query', '')
     error_msg = None
     if not initial_query:
         print("!!! initialize_state_node: Input query is empty. Setting error_message.")
@@ -201,12 +202,12 @@ def initialize_state_node(state: GraphState, invocation_input: Dict[str, Any]) -
 
     return {
         "original_query": initial_query,
-        "selected_collections": invocation_input.get('collections', []),
-        "initial_chunk_limit": int(invocation_input.get('chunk_limit', 5)),
-        "current_chunk_limit": int(invocation_input.get('chunk_limit', 5)),
+        "selected_collections": state.get('selected_collections', []),
+        "initial_chunk_limit": int(state.get('initial_chunk_limit', 5)),
+        "current_chunk_limit": int(state.get('current_chunk_limit', 5)),
         "max_chunk_limit": 15,
-        "similarity_threshold": float(invocation_input.get('similarity_threshold', 0.0)),
-        "temperature": float(invocation_input.get('temperature', 0.7)),
+        "similarity_threshold": float(state.get('similarity_threshold', 0.0)),
+        "temperature": float(state.get('temperature', 0.7)),
         "iteration_count": 1,
         "max_iterations": 3,
         "refined_query": None,
@@ -302,8 +303,7 @@ JSON Output:
         response = genai_client_instance.models.generate_content(
             model=GEMINI_MODEL,
             contents=critique_prompt,
-            config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=200),
-            response_mime_type="application/json"
+            config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=200)
         )
         critique_text = response.text.strip()
         if critique_text.startswith("```json"):
@@ -456,7 +456,7 @@ def update_state_for_retry_node(state: GraphState) -> Dict[str, Any]:
 workflow = StateGraph(GraphState)
 
 # Add ACTUAL processing nodes that update state
-workflow.add_node("initialize_state", lambda state: initialize_state_node(state, state))
+workflow.add_node("initialize_state", lambda state: initialize_state_node(state))
 workflow.add_node("refine_query", refine_query_node)
 workflow.add_node("semantic_search", semantic_search_node)
 workflow.add_node("generate_response", generate_response_node)
