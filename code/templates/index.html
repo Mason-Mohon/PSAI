@@ -10,17 +10,20 @@
         :root {
             --primary-red: rgba(155, 18, 23, 0.9);
             --primary-blue: #0e3c5c;
-            --primary-white: rgba(255, 255, 255, 0.9);
-            --light-red: rgba(155, 18, 23, 0.1);
-            --light-blue: rgba(14, 60, 92, 0.1);
+            --primary-white: #ffffff;
+            --light-gray: #f8f9fa;
+            --border-color: #e9ecef;
+            --text-muted: #6c757d;
+            --light-blue: rgba(14, 60, 92, 0.08);
+            --light-red: rgba(155, 18, 23, 0.08);
         }
 
         body {
             margin: 0;
             padding: 0;
             height: 100vh;
-            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--primary-red) 100%);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--primary-white);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             overflow: hidden;
         }
 
@@ -31,45 +34,57 @@
             max-width: 1200px;
             margin: 0 auto;
             background: var(--primary-white);
-            box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 0 40px rgba(14, 60, 92, 0.08);
         }
 
         .chat-header {
-            background: var(--primary-red);
-            color: white;
-            padding: 1rem 1.5rem;
+            background: var(--light-blue);
+            padding: 1.5rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .header-logo {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .header-logo img {
+            height: 40px;
+            width: auto;
         }
 
         .chat-header h1 {
             margin: 0;
-            font-size: 1.5rem;
+            font-size: 1.25rem;
             font-weight: 600;
+            color: var(--primary-blue);
         }
 
         .settings-btn {
             background: transparent;
-            border: 2px solid white;
-            color: white;
+            border: 1px solid var(--primary-blue);
+            color: var(--primary-blue);
             padding: 0.5rem 1rem;
-            border-radius: 20px;
+            border-radius: 8px;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
+            font-size: 0.9rem;
         }
 
         .settings-btn:hover {
-            background: white;
-            color: var(--primary-red);
+            background: var(--primary-blue);
+            color: white;
         }
 
         .chat-messages {
             flex: 1;
             overflow-y: auto;
-            padding: 1rem;
-            background: #f8f9fa;
+            padding: 2rem;
+            background: var(--light-gray);
         }
 
         .message-group {
@@ -86,33 +101,20 @@
             background: var(--primary-blue);
             color: white;
             padding: 1rem 1.5rem;
-            border-radius: 20px 20px 5px 20px;
+            border-radius: 12px;
             margin-bottom: 1rem;
             max-width: 80%;
             margin-left: auto;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 8px rgba(14, 60, 92, 0.1);
         }
 
         .ai-message {
             background: white;
-            border: 1px solid #e9ecef;
             padding: 1.5rem;
-            border-radius: 20px 20px 20px 5px;
+            border-radius: 12px;
             max-width: 85%;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            position: relative;
-        }
-
-        .ai-message::before {
-            content: '';
-            position: absolute;
-            top: -5px;
-            left: 20px;
-            width: 0;
-            height: 0;
-            border-left: 10px solid transparent;
-            border-right: 10px solid transparent;
-            border-bottom: 10px solid white;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border-left: 3px solid var(--primary-blue);
         }
 
         .ai-header {
@@ -120,20 +122,21 @@
             align-items: center;
             margin-bottom: 1rem;
             padding-bottom: 0.5rem;
-            border-bottom: 2px solid var(--primary-red);
+            border-bottom: 1px solid var(--border-color);
         }
 
         .ai-avatar {
-            width: 40px;
-            height: 40px;
+            width: 36px;
+            height: 36px;
             background: var(--primary-red);
-            border-radius: 50%;
+            border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
-            font-weight: bold;
+            font-weight: 500;
             margin-right: 1rem;
+            font-size: 0.9rem;
         }
 
         .message-controls {
@@ -143,14 +146,14 @@
         }
 
         .control-btn {
-            background: var(--light-blue);
+            background: transparent;
             border: 1px solid var(--primary-blue);
             color: var(--primary-blue);
-            padding: 0.5rem 1rem;
-            border-radius: 15px;
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
             font-size: 0.8rem;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
         }
 
         .control-btn:hover {
@@ -162,8 +165,8 @@
             margin-top: 1rem;
             padding: 1rem;
             background: var(--light-red);
-            border-radius: 10px;
-            border-left: 4px solid var(--primary-red);
+            border-radius: 8px;
+            border-left: 2px solid var(--primary-red);
             display: none;
         }
 
@@ -172,23 +175,22 @@
             padding: 1rem;
             background: white;
             border-radius: 8px;
-            border-left: 3px solid var(--primary-blue);
+            border: 1px solid var(--border-color);
         }
 
         .token-info {
             font-size: 0.8rem;
-            color: #6c757d;
+            color: var(--text-muted);
             padding: 0.5rem;
-            background: #f8f9fa;
-            border-radius: 8px;
+            background: var(--light-gray);
+            border-radius: 6px;
             margin-top: 1rem;
         }
 
         .chat-input-area {
-            padding: 1rem 1.5rem;
+            padding: 1.5rem;
             background: white;
-            border-top: 1px solid #e9ecef;
-            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+            border-top: 1px solid var(--border-color);
         }
 
         .input-group {
@@ -199,41 +201,43 @@
 
         .chat-input {
             flex: 1;
-            border: 2px solid #e9ecef;
-            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
             padding: 1rem 1.5rem;
             resize: none;
             font-size: 1rem;
-            transition: border-color 0.3s ease;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
         }
 
         .chat-input:focus {
             outline: none;
             border-color: var(--primary-blue);
+            box-shadow: 0 2px 12px rgba(14, 60, 92, 0.1);
         }
 
         .send-btn {
-            background: var(--primary-red);
+            background: var(--primary-blue);
             color: white;
             border: none;
-            padding: 1rem 1.5rem;
-            border-radius: 50%;
+            padding: 1rem;
+            border-radius: 8px;
             cursor: pointer;
-            transition: all 0.3s ease;
-            width: 60px;
-            height: 60px;
+            transition: all 0.2s ease;
+            width: 48px;
+            height: 48px;
             display: flex;
             align-items: center;
             justify-content: center;
         }
 
         .send-btn:hover {
-            background: rgba(155, 18, 23, 1);
-            transform: scale(1.05);
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(14, 60, 92, 0.2);
         }
 
         .send-btn:disabled {
-            background: #6c757d;
+            background: var(--text-muted);
             cursor: not-allowed;
             transform: none;
         }
@@ -252,7 +256,7 @@
             width: 380px;
             height: 100vh;
             background: white;
-            box-shadow: -5px 0 15px rgba(0, 0, 0, 0.3);
+            box-shadow: -5px 0 25px rgba(0, 0, 0, 0.1);
             transition: right 0.3s ease;
             z-index: 1000;
             overflow-y: auto;
@@ -265,7 +269,7 @@
         .settings-header {
             background: var(--primary-blue);
             color: white;
-            padding: 1rem 1.5rem;
+            padding: 1.25rem 1.5rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -280,9 +284,9 @@
         }
 
         .setting-label {
-            font-weight: 600;
+            font-weight: 500;
             color: var(--primary-blue);
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.75rem;
             display: block;
         }
 
@@ -291,32 +295,41 @@
         }
 
         .form-check-input:checked {
-            background-color: var(--primary-red);
-            border-color: var(--primary-red);
+            background-color: var(--primary-blue);
+            border-color: var(--primary-blue);
         }
 
         .form-range::-webkit-slider-thumb {
-            background: var(--primary-red);
+            background: var(--primary-blue);
         }
 
         .form-range::-moz-range-thumb {
-            background: var(--primary-red);
+            background: var(--primary-blue);
         }
 
-        .collection-controls {
-            margin-top: 1rem;
+        .empty-state {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 4rem 2rem;
             display: flex;
-            gap: 0.5rem;
+            flex-direction: column;
+            align-items: center;
+            gap: 1.5rem;
+            background: var(--light-blue);
+            border-radius: 12px;
+            margin: 2rem;
         }
 
-        .collection-btn {
-            background: var(--light-blue);
-            border: 1px solid var(--primary-blue);
-            color: var(--primary-blue);
-            padding: 0.4rem 0.8rem;
-            border-radius: 15px;
-            font-size: 0.8rem;
-            cursor: pointer;
+        .empty-state img {
+            width: 200px;
+            height: auto;
+            margin-bottom: 1rem;
+        }
+
+        .empty-state p {
+            font-size: 1.1rem;
+            max-width: 500px;
+            line-height: 1.6;
         }
 
         .overlay {
@@ -325,26 +338,14 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.5);
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(2px);
             z-index: 999;
             display: none;
         }
 
         .overlay.show {
             display: block;
-        }
-
-        .empty-state {
-            text-align: center;
-            color: #6c757d;
-            padding: 4rem 2rem;
-            font-style: italic;
-        }
-
-        .empty-state i {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-            color: var(--primary-blue);
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -353,7 +354,10 @@
     <div class="chat-container">
         <!-- Chat Header -->
         <div class="chat-header">
-            <h1><i class="bi bi-chat-dots"></i> Phyllis AI</h1>
+            <div class="header-logo">
+                <img src="{{ url_for('static', filename='images/PSElogoCS_v2_transparent600.png') }}" alt="PSAI Logo">
+                <h1>Phyllis AI</h1>
+            </div>
             <button class="settings-btn" onclick="toggleSettings()">
                 <i class="bi bi-gear"></i> Settings
             </button>
@@ -362,14 +366,14 @@
         <!-- Chat Messages Area -->
         <div class="chat-messages" id="chatMessages">
             <div class="empty-state">
-                <i class="bi bi-chat-text"></i>
+                <img src="{{ url_for('static', filename='images/PSElogoCS_v2_transparent600.png') }}" alt="PSAI Logo">
                 <p>Welcome to Phyllis AI! Ask me anything about Phyllis Schlafly's work and conservative viewpoints.</p>
             </div>
         </div>
 
         <!-- Loading Indicator -->
         <div class="loading-indicator" id="loadingIndicator">
-            <div class="spinner-border text-primary" role="status">
+            <div class="spinner-border" style="color: var(--primary-blue)" role="status">
                 <span class="visually-hidden">Loading...</span>
             </div>
             <p class="mt-2">Processing your query...</p>
@@ -382,7 +386,7 @@
                     class="chat-input" 
                     id="chatInput" 
                     placeholder="Ask me anything about Phyllis Schlafly..."
-                    rows="2"
+                    rows="1"
                     onkeydown="handleInputKeydown(event)"
                 ></textarea>
                 <button class="send-btn" id="sendBtn" onclick="sendMessage()">

@@ -26,7 +26,7 @@ QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 
 # Google Gemini configuration
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-GEMINI_MODEL = "gemini-1.5-flash-001"
+GEMINI_MODEL = "gemini-2.0-flash"
 
 # Initialize clients
 qdrant_client_instance = qdrant_client.QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
