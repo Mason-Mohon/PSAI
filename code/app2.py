@@ -26,7 +26,7 @@ QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 
 # Google Gemini configuration
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-GEMINI_MODEL = "gemini-2.0-flash-001"
+GEMINI_MODEL = "gemini-1.5-flash-001"
 
 # Initialize clients
 qdrant_client_instance = qdrant_client.QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
@@ -83,6 +83,12 @@ Optimized Search Query:"""
                 stop_sequences=["\n"]
             )
         )
+        
+        # Check if response and response.text are valid
+        if not response or not response.text:
+            print("Warning: Empty response from Gemini API during query refinement")
+            return query_text
+            
         refined_query = response.text.strip()
         if refined_query.startswith("Optimized Search Query:"):
             refined_query = refined_query.replace("Optimized Search Query:", "").strip()
@@ -162,8 +168,8 @@ def generate_gemini_response_internal(query, context_chunks, temperature=0.7):
             "Do not include source filenames. If the author is Phyllis Schlafly, treat it as your own words and omit the author from the endnote."
         )
         
-        input_token_response = genai_client_instance.models.count_tokens(model=GEMINI_MODEL, contents=prompt)
-        input_token_count = input_token_response.total_tokens
+        # Estimate input tokens as fallback (1 token ≈ 4 characters)
+        input_token_count = len(prompt) // 4
 
         response = genai_client_instance.models.generate_content(
             model=GEMINI_MODEL,
@@ -174,8 +180,18 @@ def generate_gemini_response_internal(query, context_chunks, temperature=0.7):
                 max_output_tokens=1024,
             ),
         )
-        output_token_response = genai_client_instance.models.count_tokens(model=GEMINI_MODEL, contents=response.text)
-        output_token_count = output_token_response.total_tokens
+        
+        # Check if response and response.text are valid
+        if not response or not response.text:
+            print("Warning: Empty or None response from Gemini API")
+            return {
+                "text": "I apologize, but I was unable to generate a response at this time. Please try again.",
+                "token_info": {"input_tokens": input_token_count, "output_tokens": 0, "total_tokens": input_token_count},
+                "formatted_context_for_generation": formatted_context_string
+            }
+        
+        # Estimate output tokens as fallback (1 token ≈ 4 characters)
+        output_token_count = len(response.text) // 4
         
         return {
             "text": response.text,
@@ -269,12 +285,11 @@ def critique_response_node(state: GraphState) -> Dict[str, Any]:
     print(f"--- Running: Critique Response Node (Iteration: {state['iteration_count']}) ---")
     if not state['generated_response_text'] or not state['original_query']:
         print("--- critique_response_node: Missing generated_response_text or original_query for critique.")
-        return {"critique_json": {"answer_quality": "ERROR", "reasoning": "Missing generated response or query for critique."}}
+        return {"critique_json": {"answer_quality": "ERROR_IN_CRITIQUE", "reasoning": "Missing generated response or query for critique."}}
 
     context_str = state.get('formatted_context_for_generation', "Context not available.")
     if not state['search_results']:
         context_str = "No context was retrieved or provided for generation."
-
 
     critique_prompt = f"""You are an expert evaluator. Your task is to assess a generated answer based on a user's query and the context retrieved to formulate that answer.
 The system can retrieve up to {state['max_chunk_limit']} context chunks in total. It is currently on iteration {state['iteration_count']} of {state['max_iterations']} and has retrieved {state['current_chunk_limit']} chunks.
@@ -305,6 +320,12 @@ JSON Output:
             contents=critique_prompt,
             config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=200)
         )
+        
+        # Check if response and response.text are valid
+        if not response or not response.text:
+            print("Warning: Empty response from Gemini API during critique")
+            return {"critique_json": {"answer_quality": "ERROR_IN_CRITIQUE", "reasoning": "Empty response from critique API"}}
+            
         critique_text = response.text.strip()
         if critique_text.startswith("```json"):
             critique_text = critique_text[len("```json"):]
