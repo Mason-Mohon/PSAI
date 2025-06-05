@@ -16,6 +16,13 @@ from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
+import time
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # LangGraph imports
 from langgraph.graph import StateGraph, END
@@ -33,7 +40,7 @@ QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 
 # Google Gemini configuration
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-2.0-flash-lite"
 
 # Initialize clients
 qdrant_client_instance = qdrant_client.QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
@@ -73,39 +80,78 @@ def get_available_collections_internal():
     collections = [c.name for c in qdrant_client_instance.get_collections().collections]
     return collections
 
+class APIError(Exception):
+    """Custom exception for API-related errors"""
+    def __init__(self, message, status_code=None):
+        self.message = message
+        self.status_code = status_code
+        super().__init__(self.message)
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=4, max=10),
+    retry=retry_if_exception_type(APIError)
+)
+def call_gemini_with_retry(model: str, prompt: str, config: Any) -> Any:
+    """Call Gemini API with retry logic"""
+    try:
+        response = genai_client_instance.models.generate_content(
+            model=model,
+            contents=prompt,
+            config=config
+        )
+        
+        if not response or not response.text:
+            raise APIError("Empty response from Gemini API")
+        
+        return response
+    except Exception as e:
+        error_msg = str(e)
+        if "503" in error_msg or "overloaded" in error_msg.lower():
+            logger.warning(f"Gemini API overloaded, will retry: {error_msg}")
+            raise APIError(f"Gemini API temporarily unavailable: {error_msg}", 503)
+        else:
+            logger.error(f"Unexpected error calling Gemini API: {error_msg}")
+            raise
+
 def refine_query_for_semantic_search_internal(query_text: str) -> str:
+    """Refine the query with fallback mechanisms"""
     prompt = f"""Rewrite the following user query to be optimized for semantic search against a knowledge base primarily focused on Phyllis Schlafly's life, work, and conservative viewpoints.
 Extract the key entities, topics, and the core intent. Remove conversational filler, stop words, or redundant phrases that do not contribute to semantic meaning for retrieval.
 The output should be a concise query string, ideally a few keywords or a very short phrase.
 
 User Query: "{query_text}"
 Optimized Search Query:"""
+
     try:
-        response = genai_client_instance.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.1,
-                max_output_tokens=60,
-                stop_sequences=["\n"]
-            )
+        config = types.GenerateContentConfig(
+            temperature=0.1,
+            max_output_tokens=60,
+            stop_sequences=["\n"]
         )
         
-        # Check if response and response.text are valid
-        if not response or not response.text:
-            print("Warning: Empty response from Gemini API during query refinement")
-            return query_text
-            
+        response = call_gemini_with_retry(
+            model=GEMINI_MODEL,
+            prompt=prompt,
+            config=config
+        )
+        
         refined_query = response.text.strip()
         if refined_query.startswith("Optimized Search Query:"):
             refined_query = refined_query.replace("Optimized Search Query:", "").strip()
         refined_query = refined_query.strip('\'\"')
-        print(f"Original query for refinement: '{query_text}'")
-        print(f"Refined query for search: '{refined_query}'")
+        
+        logger.info(f"Query refinement successful: '{query_text}' -> '{refined_query}'")
         return refined_query if refined_query else query_text
+        
     except Exception as e:
-        print(f"Error refining query: {e}")
-        return query_text
+        logger.warning(f"Query refinement failed, using original query: {e}")
+        # Fallback: Extract key terms from the original query
+        key_terms = ' '.join(word for word in query_text.split() 
+                           if len(word) > 3 and word.lower() not in 
+                           {'what', 'when', 'where', 'which', 'who', 'whom', 'whose', 'why', 'how',
+                            'tell', 'about', 'could', 'would', 'should', 'please'})
+        return key_terms if key_terms else query_text
 
 def semantic_search_internal(query_text, collections, limit=5, similarity_threshold=0.0):
     query_vector = embedding_model.encode(query_text).tolist()
@@ -124,8 +170,7 @@ def semantic_search_internal(query_text, collections, limit=5, similarity_thresh
                     "collection": collection_name,
                     "score": result.score,
                     "text": result.payload.get("text", ""),
-                    "metadata": {},
-                    "ref_id": f"REF_SEM_{idx+1}"
+                    "metadata": {}
                 }
                 if "metadata" in result.payload:
                     formatted_result["metadata"] = result.payload["metadata"]
@@ -156,7 +201,7 @@ def generate_gemini_response_internal(query, context_chunks, temperature=0.7):
             if author: source_info += f", Author: {author}"
             if doc_type: source_info += f", Type: {doc_type}"
 
-            formatted_chunks_for_prompt.append(f"[{chunk['ref_id']}] Source [{source_info}]: {chunk['text']}")
+            formatted_chunks_for_prompt.append(f"Source [{source_info}]: {chunk['text']}")
         
         formatted_context_string = "\\n\\n".join(formatted_chunks_for_prompt)
 
@@ -169,49 +214,94 @@ def generate_gemini_response_internal(query, context_chunks, temperature=0.7):
             f"Context:\\n{formatted_context_string}\\n\\n"
             f"Question: {query}\\n\\n"
             "Answer the question strictly based on the above context. "
-            "When referencing any chunk, indicate its reference ID inline (e.g., [REF_SEM_1], [REF_SEM_2]) and include numbered endnotes at the end of your response. "
+            "Include numbered endnotes at the end of your response for any sources you reference. "
             "Each endnote should follow this format: [n] Title of piece, publication (e.g., Phyllis Schlafly Report or book title), date, author. "
-            "If the information is not visible in the chunk itself, use the information within the metadata to generate the citation."
+            "If the information is not visible in the chunk itself, use the information within the metadata to generate the citation. "
             "Do not include source filenames. If the author is Phyllis Schlafly, treat it as your own words and omit the author from the endnote."
         )
-        
-        # Estimate input tokens as fallback (1 token ≈ 4 characters)
+
+        # Estimate input tokens
         input_token_count = len(prompt) // 4
 
-        response = genai_client_instance.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
+        try:
+            config = types.GenerateContentConfig(
                 temperature=temperature,
                 system_instruction=system_instruction,
                 max_output_tokens=1024,
-            ),
-        )
-        
-        # Check if response and response.text are valid
-        if not response or not response.text:
-            print("Warning: Empty or None response from Gemini API")
+            )
+            
+            response = call_gemini_with_retry(
+                model=GEMINI_MODEL,
+                prompt=prompt,
+                config=config
+            )
+            
+            output_token_count = len(response.text) // 4
+            
             return {
-                "text": "I apologize, but I was unable to generate a response at this time. Please try again.",
-                "token_info": {"input_tokens": input_token_count, "output_tokens": 0, "total_tokens": input_token_count},
+                "text": response.text,
+                "token_info": {
+                    "input_tokens": input_token_count,
+                    "output_tokens": output_token_count,
+                    "total_tokens": input_token_count + output_token_count
+                },
                 "formatted_context_for_generation": formatted_context_string
             }
-        
-        # Estimate output tokens as fallback (1 token ≈ 4 characters)
-        output_token_count = len(response.text) // 4
-        
-        return {
-            "text": response.text,
-            "token_info": {
-                "input_tokens": input_token_count,
-                "output_tokens": output_token_count,
-                "total_tokens": input_token_count + output_token_count
-            },
-            "formatted_context_for_generation": formatted_context_string
-        }
+            
+        except APIError as e:
+            logger.error(f"Error generating response with Gemini: {e}")
+            # Fallback: Generate a simple response based on the chunks
+            fallback_response = generate_fallback_response(query, context_chunks)
+            return {
+                "text": fallback_response,
+                "token_info": {"input_tokens": input_token_count, "output_tokens": len(fallback_response) // 4, "total_tokens": input_token_count + len(fallback_response) // 4},
+                "formatted_context_for_generation": formatted_context_string
+            }
+            
     except Exception as e:
-        print(f"Error in generate_gemini_response_internal: {e}")
-        return {"text": f"Error generating response: {str(e)}", "token_info": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}, "formatted_context_for_generation": ""}
+        logger.error(f"Unexpected error in generate_gemini_response_internal: {e}")
+        return {
+            "text": "I apologize, but I am currently experiencing technical difficulties. Please try your question again in a moment.",
+            "token_info": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+            "formatted_context_for_generation": ""
+        }
+
+def generate_fallback_response(query: str, chunks: List[Dict]) -> str:
+    """Generate a simple response when the main model is unavailable"""
+    try:
+        # Sort chunks by relevance score
+        sorted_chunks = sorted(chunks, key=lambda x: x.get('score', 0), reverse=True)
+        
+        # Build a response using the most relevant chunks
+        response_parts = ["Based on the available information:"]
+        
+        for i, chunk in enumerate(sorted_chunks, 1):
+            # Extract key information
+            text = chunk.get('text', '').strip()
+            metadata = chunk.get('metadata', {})
+            source = metadata.get('book_title') or metadata.get('doc_type') or chunk.get('collection', 'Unknown source')
+            year = metadata.get('publication_year', '')
+            
+            # Add to response
+            if text:
+                response_parts.append(f"\n{text}")
+        
+        # Add endnotes
+        response_parts.append("\nSources:")
+        for i, chunk in enumerate(sorted_chunks, 1):
+            metadata = chunk.get('metadata', {})
+            source = metadata.get('book_title') or metadata.get('doc_type') or chunk.get('collection', 'Unknown source')
+            year = metadata.get('publication_year', '')
+            citation = f"[{i}] {source}"
+            if year:
+                citation += f", {year}"
+            response_parts.append(citation)
+        
+        return "\n".join(response_parts)
+        
+    except Exception as e:
+        logger.error(f"Error in fallback response generation: {e}")
+        return "I apologize, but I am currently experiencing technical difficulties. Please try your question again in a moment."
 
 # --- LangGraph Nodes ---
 def initialize_state_node(state: GraphState) -> Dict[str, Any]:
@@ -322,16 +412,16 @@ Based on this, provide your evaluation in JSON format with the following keys:
 JSON Output:
 """
     try:
-        response = genai_client_instance.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=critique_prompt,
-            config=types.GenerateContentConfig(temperature=0.2, max_output_tokens=200)
+        config = types.GenerateContentConfig(
+            temperature=0.2,
+            max_output_tokens=200
         )
         
-        # Check if response and response.text are valid
-        if not response or not response.text:
-            print("Warning: Empty response from Gemini API during critique")
-            return {"critique_json": {"answer_quality": "ERROR_IN_CRITIQUE", "reasoning": "Empty response from critique API"}}
+        response = call_gemini_with_retry(
+            model=GEMINI_MODEL,
+            prompt=critique_prompt,
+            config=config
+        )
             
         critique_text = response.text.strip()
         if critique_text.startswith("```json"):
@@ -341,10 +431,16 @@ JSON Output:
         critique_text = critique_text.strip()
         
         parsed_critique = json.loads(critique_text)
-        print(f"Critique received and parsed: {parsed_critique}")
+        logger.info(f"Critique received and parsed: {parsed_critique}")
         return {"critique_json": parsed_critique}
+    except APIError as e:
+        logger.error(f"critique_response_node: API error during critique: {e}")
+        return {"critique_json": {"answer_quality": "ERROR_IN_CRITIQUE", "reasoning": f"API error during critique: {str(e)}"}}
+    except json.JSONDecodeError as e:
+        logger.error(f"critique_response_node: JSON parsing error: {e}. Raw response: '{response.text if 'response' in locals() else 'N/A'}'")
+        return {"critique_json": {"answer_quality": "ERROR_IN_CRITIQUE", "reasoning": f"JSON parsing error: {str(e)}"}}
     except Exception as e:
-        print(f"!!! critique_response_node: Error during critique API call or JSON parsing: {e}. Raw critique response: '{response.text if 'response' in locals() else 'N/A'}'")
+        logger.error(f"critique_response_node: Unexpected error: {e}. Raw response: '{response.text if 'response' in locals() else 'N/A'}'")
         return {"critique_json": {"answer_quality": "ERROR_IN_CRITIQUE", "reasoning": str(e)}}
 
 def prepare_final_output_node(state: GraphState | None) -> Dict[str, Any]:
