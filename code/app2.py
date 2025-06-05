@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_file
 import os
 from dotenv import load_dotenv
 from pathlib import Path
@@ -9,6 +9,13 @@ from google import genai
 from google.genai import types
 import json
 from typing import TypedDict, List, Dict, Any, Literal
+import io
+from datetime import datetime
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
 
 # LangGraph imports
 from langgraph.graph import StateGraph, END
@@ -552,6 +559,132 @@ def query_api_route():
             "original_query": initial_graph_input["original_query"],
             "response": error_msg
         }), 500
+
+def format_conversation_text(query: str, response: str, chunks: List[Dict]) -> str:
+    """Format the conversation as plain text."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    text = f"Conversation Export - {timestamp}\n\n"
+    text += "Question:\n" + query + "\n\n"
+    text += "Answer:\n" + response + "\n\n"
+    text += "Reference Chunks:\n"
+    
+    for i, chunk in enumerate(chunks, 1):
+        text += f"\nChunk {i}:\n"
+        text += f"Collection: {chunk.get('collection', 'N/A')}\n"
+        text += f"Text: {chunk.get('text', 'N/A')}\n"
+        text += f"Score: {chunk.get('score', 'N/A')}\n"
+        
+        metadata = chunk.get('metadata', {})
+        if metadata:
+            text += "Metadata:\n"
+            for key, value in metadata.items():
+                text += f"  {key}: {value}\n"
+        text += "-" * 80 + "\n"
+    
+    return text
+
+def create_pdf(query: str, response: str, chunks: List[Dict]) -> bytes:
+    """Create a PDF document of the conversation."""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=72)
+    
+    # Styles
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=16,
+        spaceAfter=30
+    )
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading2'],
+        fontSize=14,
+        spaceAfter=12
+    )
+    normal_style = styles['Normal']
+    
+    # Content
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    elements = []
+    
+    # Title
+    elements.append(Paragraph(f"Conversation Export - {timestamp}", title_style))
+    elements.append(Spacer(1, 12))
+    
+    # Question
+    elements.append(Paragraph("Question:", heading_style))
+    elements.append(Paragraph(query, normal_style))
+    elements.append(Spacer(1, 12))
+    
+    # Answer
+    elements.append(Paragraph("Answer:", heading_style))
+    elements.append(Paragraph(response, normal_style))
+    elements.append(Spacer(1, 12))
+    
+    # Reference Chunks
+    elements.append(Paragraph("Reference Chunks:", heading_style))
+    
+    for i, chunk in enumerate(chunks, 1):
+        elements.append(Spacer(1, 12))
+        elements.append(Paragraph(f"Chunk {i}:", heading_style))
+        
+        # Create a table for chunk details
+        data = [
+            ["Collection:", chunk.get('collection', 'N/A')],
+            ["Score:", str(chunk.get('score', 'N/A'))],
+            ["Text:", chunk.get('text', 'N/A')]
+        ]
+        
+        metadata = chunk.get('metadata', {})
+        for key, value in metadata.items():
+            data.append([f"{key}:", str(value)])
+            
+        table = Table(data, colWidths=[1.5*inch, 5*inch])
+        table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('TEXTCOLOR', (0, 0), (0, -1), colors.grey),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('GRID', (0, 0), (-1, -1), 0.25, colors.grey),
+        ]))
+        elements.append(table)
+    
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+@app.route('/api/download/<format>', methods=['POST'])
+def download_conversation(format):
+    data = request.json
+    query = data.get('query', '')
+    response = data.get('response', '')
+    chunks = data.get('chunks', [])
+    
+    if format not in ['txt', 'pdf']:
+        return jsonify({"error": "Invalid format. Must be 'txt' or 'pdf'"}), 400
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    if format == 'txt':
+        text_content = format_conversation_text(query, response, chunks)
+        buffer = io.BytesIO(text_content.encode('utf-8'))
+        filename = f"conversation_{timestamp}.txt"
+        mimetype = 'text/plain'
+    else:  # pdf
+        buffer = io.BytesIO(create_pdf(query, response, chunks))
+        filename = f"conversation_{timestamp}.pdf"
+        mimetype = 'application/pdf'
+    
+    buffer.seek(0)
+    return send_file(
+        buffer,
+        mimetype=mimetype,
+        as_attachment=True,
+        download_name=filename
+    )
 
 if __name__ == '__main__':
     if not GOOGLE_API_KEY:

@@ -143,6 +143,7 @@
             margin-top: 1rem;
             display: flex;
             gap: 0.5rem;
+            flex-wrap: wrap;
         }
 
         .control-btn {
@@ -154,11 +155,57 @@
             font-size: 0.8rem;
             cursor: pointer;
             transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
         }
 
         .control-btn:hover {
             background: var(--primary-blue);
             color: white;
+        }
+
+        .control-btn i {
+            font-size: 0.9rem;
+        }
+
+        .download-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .download-options {
+            display: none;
+            position: absolute;
+            background: white;
+            min-width: 160px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            border-radius: 6px;
+            padding: 0.5rem;
+            z-index: 1;
+            top: 100%;
+            left: 0;
+            margin-top: 0.5rem;
+        }
+
+        .download-options.show {
+            display: block;
+        }
+
+        .download-option {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            color: var(--primary-blue);
+            text-decoration: none;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .download-option:hover {
+            background: var(--light-blue);
         }
 
         .reference-chunks {
@@ -447,6 +494,7 @@
 
     <script>
         let messageCounter = 0;
+        let currentConversationData = {};
 
         function toggleSettings() {
             const panel = document.getElementById('settingsPanel');
@@ -510,6 +558,13 @@
             messageCounter++;
             const chatMessages = document.getElementById('chatMessages');
             
+            // Store the conversation data for downloads
+            currentConversationData = {
+                query: userQuery,
+                response: aiResponse,
+                chunks: chunks
+            };
+            
             // Remove empty state if it exists
             const emptyState = chatMessages.querySelector('.empty-state');
             if (emptyState) {
@@ -539,6 +594,19 @@
                         <button class="control-btn" onclick="toggleReferences(${messageCounter})">
                             <i class="bi bi-book"></i> View References (${chunks.length})
                         </button>
+                        <div class="download-dropdown">
+                            <button class="control-btn" onclick="toggleDownloadOptions(${messageCounter})">
+                                <i class="bi bi-download"></i> Download
+                            </button>
+                            <div class="download-options" id="download-options-${messageCounter}">
+                                <a class="download-option" onclick="downloadConversation('txt')">
+                                    <i class="bi bi-file-text"></i> Download as TXT
+                                </a>
+                                <a class="download-option" onclick="downloadConversation('pdf')">
+                                    <i class="bi bi-file-pdf"></i> Download as PDF
+                                </a>
+                            </div>
+                        </div>
                     </div>
                     <div class="reference-chunks" id="references-${messageCounter}">
                         <h6 style="color: var(--primary-red); margin-bottom: 1rem;">
@@ -576,6 +644,65 @@
             const references = document.getElementById(`references-${messageId}`);
             const isVisible = references.style.display === 'block';
             references.style.display = isVisible ? 'none' : 'block';
+        }
+
+        function toggleDownloadOptions(messageId) {
+            const options = document.getElementById(`download-options-${messageId}`);
+            options.classList.toggle('show');
+            
+            // Close other dropdowns
+            document.querySelectorAll('.download-options').forEach(dropdown => {
+                if (dropdown.id !== `download-options-${messageId}`) {
+                    dropdown.classList.remove('show');
+                }
+            });
+            
+            // Close dropdown when clicking outside
+            document.addEventListener('click', function closeDropdown(e) {
+                if (!e.target.closest('.download-dropdown')) {
+                    options.classList.remove('show');
+                    document.removeEventListener('click', closeDropdown);
+                }
+            });
+        }
+
+        async function downloadConversation(format) {
+            try {
+                const response = await fetch(`/api/download/${format}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(currentConversationData)
+                });
+
+                if (!response.ok) {
+                    throw new Error('Download failed');
+                }
+
+                // Create a blob from the response
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                
+                // Create a temporary link and click it
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = response.headers.get('content-disposition')?.split('filename=')[1] || `conversation.${format}`;
+                document.body.appendChild(a);
+                a.click();
+                
+                // Cleanup
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                // Close any open download dropdowns
+                document.querySelectorAll('.download-options').forEach(dropdown => {
+                    dropdown.classList.remove('show');
+                });
+            } catch (error) {
+                console.error('Error downloading conversation:', error);
+                alert('Failed to download the conversation. Please try again.');
+            }
         }
 
         async function sendMessage() {
