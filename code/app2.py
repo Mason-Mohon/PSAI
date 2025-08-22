@@ -664,6 +664,10 @@ def index():
     collections = get_available_collections_internal()
     return render_template('index.html', collections=collections)
 
+@app.route('/healthz', methods=['GET'])
+def healthz():
+    return jsonify({"ok": True})
+
 @app.route('/api/query', methods=['POST'])
 def query_api_route():
     data = request.json
